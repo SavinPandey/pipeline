@@ -3,20 +3,24 @@ pipeline {
 
     environment {
         DOCKER_CREDENTIALS = credentials('DOCKER_CREDENTIALS')
-        GITHUB_CREDENTIALS = credentials('GITHUB_CREDENTIALS')
+        GITHUB_TOKEN = credentials('GITHUB_TOKEN')
         REPO_NAME = 'savinpandey/pipeline'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git credentialsId: 'GITHUB_CREDENTIALS', url: 'https://github.com/SavinPandey/pipeline.git', branch: 'main'
+                git credentialsId: 'GITHUB_TOKEN', url: 'https://github.com/SavinPandey/pipeline.git', branch: 'main'
             }
         }
 
         stage('Login to Docker Hub') {
             steps {
-                sh "echo ${DOCKER_CREDENTIALS} | docker login -u '${DOCKER_CREDENTIALS_USR}' --password-stdin"
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'DOCKER_CREDENTIALS', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
+                    }
+                }
             }
         }
 
@@ -24,7 +28,11 @@ pipeline {
             steps {
                 script {
                     def latestTag = sh(
-                        script: "curl -s 'https://hub.docker.com/v2/repositories/${REPO_NAME}/tags/' | jq -r '.results[].name' | grep -E '^v[0-9]+$' | sort -V | tail -n1",
+                        script: '''
+                        set -o pipefail
+                        curl -s "https://hub.docker.com/v2/repositories/savinpandey/pipeline/tags/" | \
+                        jq -r '.results[].name' | grep -E '^v[0-9]+$' | sort -V | tail -n1
+                        ''',
                         returnStdout: true
                     ).trim()
 
@@ -34,7 +42,7 @@ pipeline {
                         def tagNum = latestTag.replaceAll('v', '').toInteger() + 1
                         env.NEW_TAG = "v${tagNum}"
                     }
-                    echo "✅ New Docker tag: ${env.NEW_TAG}"
+                    echo "New Docker tag: ${env.NEW_TAG}"
                 }
             }
         }
@@ -62,7 +70,7 @@ pipeline {
 
         stage('Commit and Push Updated Deployment') {
             steps {
-                withCredentials([string(credentialsId: 'GITHUB_CREDENTIALS', variable: 'TOKEN')]) {
+                withCredentials([string(credentialsId: 'GITHUB_TOKEN', variable: 'TOKEN')]) {
                     sh """
                     git config --global user.email "github-actions@github.com"
                     git config --global user.name "GitHub Actions"
@@ -75,14 +83,42 @@ pipeline {
                 }
             }
         }
+
+        stage('Apply Updated Deployment') {
+            steps {
+                sh '''
+                if [ ! -f "$HOME/.kube/config" ]; then
+                    echo "❌ Kubeconfig not found!"
+                    exit 1
+                fi
+                export KUBECONFIG=$HOME/.kube/config
+                kubectl config view
+                kubectl apply -f deployment/deployment.yaml
+                '''
+            }
+        }
+
+        stage('Rolling Restart Pods') {
+            steps {
+                sh '''
+                if [ ! -f "$HOME/.kube/config" ]; then
+                    echo "❌ Kubeconfig not found!"
+                    exit 1
+                fi
+                export KUBECONFIG=$HOME/.kube/config
+                kubectl rollout restart deployment pipeline-app
+                '''
+            }
+        }
     }
 
     post {
         success {
-            echo '🎉 Pipeline executed successfully!'
+            echo '✅ Pipeline executed successfully!'
         }
         failure {
             echo '❌ Pipeline failed. Check logs for errors.'
         }
     }
 }
+
