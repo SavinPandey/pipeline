@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_CREDENTIALS = credentials('DOCKER_CREDENTIALS')
         GITHUB_CREDENTIALS = credentials('GITHUB_CREDENTIALS')
-        REPO_NAME = 'savinpandey/cicd-app'
+        REPO_NAME = 'savinpandey/pipeline'
     }
 
     stages {
