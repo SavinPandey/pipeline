@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fastapi-app
+  name: pipeline-app
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: fastapi-app
+      app: pipeline-app
   template:
     metadata:
       labels:
-        app: fastapi-app
+        app: pipeline-app
     spec:
       containers:
       - name: fastapi-app
-        image: savinpandey/pipeline:v6
+        image: savinpandey/pipeline:latest
         ports:
         - containerPort: 8000
         env:
