@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: fastapi-app
-        image: savinpandey/pipeline:latest
+        image: savinpandey/pipeline:v7
         ports:
         - containerPort: 8000
         env:
